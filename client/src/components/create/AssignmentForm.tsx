@@ -68,24 +68,31 @@ export default function AssignmentForm() {
 
       // Connect WebSocket and listen for updates
       connect();
-      joinAssignment(assignment._id, {
-        onProgress: (data) => {
-          setGenerationStatus('processing');
-          setGenerationProgress(data.progress, data.message);
-        },
-        onComplete: (data) => {
-          setGenerationStatus('completed');
-          setGeneratedPaper(data.paper);
-          setGenerationProgress(100, 'Complete!');
-          setTimeout(() => {
-            router.push(`/assessment/${assignment._id}`);
-          }, 800);
-        },
-        onFailed: (data) => {
-          setGenerationStatus('failed');
-          setGenerationProgress(0, data.error);
-        },
-      });
+      
+      // Give socket time to connect before joining the room
+      setTimeout(() => {
+        joinAssignment(assignment._id, {
+          onProgress: (data) => {
+            console.log('[Form] Generation progress:', data);
+            setGenerationStatus('processing');
+            setGenerationProgress(data.progress, data.message);
+          },
+          onComplete: (data) => {
+            console.log('[Form] Generation complete!', data);
+            setGenerationStatus('completed');
+            setGeneratedPaper(data.paper);
+            setGenerationProgress(100, 'Complete!');
+            setTimeout(() => {
+              router.push(`/assessment/${assignment._id}`);
+            }, 800);
+          },
+          onFailed: (data) => {
+            console.error('[Form] Generation failed:', data);
+            setGenerationStatus('failed');
+            setGenerationProgress(0, data.error);
+          },
+        });
+      }, 100);
     },
     [formData, submitAssignment, connect, joinAssignment, setGenerationStatus, setGenerationProgress, setGeneratedPaper, router]
   );

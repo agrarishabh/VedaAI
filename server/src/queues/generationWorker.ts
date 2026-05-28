@@ -72,10 +72,8 @@ export function createWorker(io: SocketIOServer): Worker<GenerationJobData> {
         await redis.setex(cacheKey, 3600, JSON.stringify(assignment.toObject()));
 
         // Step 7: Emit completion
+        console.log(`📨 Emitting generation:complete to room ${assignmentId}`);
         io.to(assignmentId).emit('generation:complete', {
-          assignmentId,
-          message: 'Question paper generated successfully!',
-          progress: 100,
           paper: generatedPaper,
         });
 
@@ -93,10 +91,9 @@ export function createWorker(io: SocketIOServer): Worker<GenerationJobData> {
         }
 
         // Emit failure event
+        console.log(`📨 Emitting generation:failed to room ${assignmentId}`);
         io.to(assignmentId).emit('generation:failed', {
-          assignmentId,
-          message: `Generation failed: ${message}`,
-          progress: 0,
+          error: message,
         });
 
         throw error; // Re-throw so BullMQ handles the retry
