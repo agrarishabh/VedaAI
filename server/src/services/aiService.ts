@@ -135,7 +135,12 @@ export async function generateQuestions(prompt: string): Promise<GeneratedPaper>
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        models: [
+          'meta-llama/llama-3.3-70b-instruct:free',
+          'meta-llama/llama-3.1-8b-instruct:free',
+          'google/gemma-2-9b-it:free',
+          'mistralai/mistral-7b-instruct:free'
+        ],
         messages: [
           { role: 'user', content: prompt }
         ],
