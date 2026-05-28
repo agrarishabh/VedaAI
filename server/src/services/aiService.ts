@@ -126,55 +126,74 @@ export async function generateQuestions(prompt: string): Promise<GeneratedPaper>
       throw new Error('OPENROUTER_API_KEY is not defined in environment variables');
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://vedaai.com', 
-        'X-Title': 'VedaAI Assessment Creator',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        response_format: { type: 'json_object' }
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenRouter API Error (${response.status}): ${errorText}`);
-    }
-
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content;
-
-    if (!text) {
-      throw new Error('Empty response from OpenRouter AI');
-    }
-
-    console.log('📝 Received response from OpenRouter AI, parsing JSON...');
-
-    const cleanedJson = cleanJsonResponse(text);
-    let parsed: unknown;
+    // Create AbortController with 120 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('⏱️ API request timeout after 120 seconds, aborting...');
+      controller.abort();
+    }, 120000);
 
     try {
-      parsed = JSON.parse(cleanedJson);
-    } catch (parseError) {
-      console.error('❌ Failed to parse AI response as JSON.');
-      console.error('Raw response (first 500 chars):', text.substring(0, 500));
-      throw new Error('Failed to parse AI response as valid JSON');
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://vedaai.com', 
+          'X-Title': 'VedaAI Assessment Creator',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          response_format: { type: 'json_object' }
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API Error (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content;
+
+      if (!text) {
+        throw new Error('Empty response from OpenRouter AI');
+      }
+
+      console.log('📝 Received response from OpenRouter AI, parsing JSON...');
+
+      const cleanedJson = cleanJsonResponse(text);
+      let parsed: unknown;
+
+      try {
+        parsed = JSON.parse(cleanedJson);
+      } catch (parseError) {
+        console.error('❌ Failed to parse AI response as JSON.');
+        console.error('Raw response (first 500 chars):', text.substring(0, 500));
+        throw new Error('Failed to parse AI response as valid JSON');
+      }
+
+      const paper = validateGeneratedPaper(parsed);
+      console.log(
+        `✅ Generated paper with ${paper.metadata.totalQuestions} questions, ${paper.metadata.totalMarks} total marks`
+      );
+
+      return paper;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('API request timeout - OpenRouter took too long to respond');
+      }
+      throw fetchError;
     }
-
-    const paper = validateGeneratedPaper(parsed);
-    console.log(
-      `✅ Generated paper with ${paper.metadata.totalQuestions} questions, ${paper.metadata.totalMarks} total marks`
-    );
-
-    return paper;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('❌ AI generation error:', message);
