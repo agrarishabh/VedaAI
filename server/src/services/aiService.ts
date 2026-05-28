@@ -1,13 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
 import type { GeneratedPaper, Section, Question } from '../types/index.js';
-
-const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
 function cleanJsonResponse(text: string): string {
   let cleaned = text.trim();
 
-  // Remove markdown code block wrappers if present
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.slice(7);
   } else if (cleaned.startsWith('```')) {
@@ -123,27 +119,44 @@ function validateGeneratedPaper(data: unknown): GeneratedPaper {
 
 export async function generateQuestions(prompt: string): Promise<GeneratedPaper> {
   try {
-    console.log('🤖 Sending prompt to Gemini AI...');
+    console.log('🤖 Sending prompt to OpenRouter AI...');
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-pro',
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 8192,
-      },
-    });
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    if (!text) {
-      throw new Error('Empty response from Gemini AI');
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENROUTER_API_KEY is not defined in environment variables');
     }
 
-    console.log('📝 Received response from Gemini AI, parsing JSON...');
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://vedaai.com', 
+        'X-Title': 'VedaAI Assessment Creator',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API Error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
+
+    if (!text) {
+      throw new Error('Empty response from OpenRouter AI');
+    }
+
+    console.log('📝 Received response from OpenRouter AI, parsing JSON...');
 
     const cleanedJson = cleanJsonResponse(text);
     let parsed: unknown;
@@ -168,3 +181,4 @@ export async function generateQuestions(prompt: string): Promise<GeneratedPaper>
     throw new Error(`AI generation failed: ${message}`);
   }
 }
+
